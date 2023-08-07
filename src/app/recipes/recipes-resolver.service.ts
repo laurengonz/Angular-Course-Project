@@ -1,23 +1,32 @@
 import { Injectable, inject } from "@angular/core";
 
 import { Recipe } from "./recipe.model";
-import { DataStorageService } from "../shared/data-storage.service";
 import { ResolveFn, ActivatedRouteSnapshot, RouterStateSnapshot } from "@angular/router";
-import { RecipeService } from "./recipe.service";
-import { Observable } from "rxjs";
+import { Observable, map, of, switchMap, take } from "rxjs";
+import { Store } from "@ngrx/store";
+import * as fromApp from '../store/app.reducer';
+import * as RecipeActions from '../recipes/store/recipe.actions';
+import { Actions, ofType } from "@ngrx/effects";
 
 @Injectable({providedIn: 'root'})
 export class RecipesResolver {
-    constructor(private dataStorageService: DataStorageService, private recipesService: RecipeService) {}
+    constructor(private store: Store<fromApp.AppState>, private actions$: Actions) {}
 
     resolveForwardRef(route: ActivatedRouteSnapshot, state: RouterStateSnapshot):Observable<Recipe[]> | Promise<Recipe[]> | Recipe[]{
-        const recipes = this.recipesService.getRecipes(); 
-
-        if(recipes.length === 0) { 
-            return this.dataStorageService.fetchRecipes();
-        } else {
-            return recipes;
-        }
+        return this.store.select('recipes').pipe(
+            take(1),
+            map(recipesState => {
+                return recipesState.recipes;
+            }),
+            switchMap(recipes => {
+                if(recipes.length === 0) {
+                    this.store.dispatch(new RecipeActions.FetchRecipes());
+                    return this.actions$.pipe(ofType(RecipeActions.SET_RECIPES), take(1));
+                } else {
+                    return of(recipes);
+                }
+            })
+        );
     }
 }
 
